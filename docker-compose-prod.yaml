@@ -1,0 +1,13 @@
+version: "3.7"
+
+services:
+
+  swagger-ui:
+    build:
+      context: .
+      dockerfile: ./deploy/Dockerfile
+    container_name: "swagger-ui"
+    ports:
+      - "8082:8080"
+    environment:
+      SWAGGER_JSON: /specification/specification.yaml
