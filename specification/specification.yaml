@@ -1,0 +1,205 @@
+openapi: 3.0.0
+
+info:
+  title: "BriteCore REST API"
+  description: "BriteCore REST API Specification"
+  version: 0.0.0
+  contact:
+    email: "andre_savioli@hotmail.com"
+
+servers:
+  - url: http://localhost:8000/api/v1
+    description: "Development Server"
+  - url: http://staging.britecore.app/api/v1
+    description: "Staging Server - Not Implemented"
+  - url: http://production.britecore.app/api/v1
+    description: "Production Server"
+
+components:
+
+  schemas:
+
+    Risk:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        category:
+          type: object
+          allOf:
+            - $ref: "#/components/schemas/Category"
+
+    Category:
+      type: object
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+
+    Field:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        required:
+          type: boolean
+        type:
+          type: string
+        order:
+          type: integer
+
+    TextField:
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/Field"
+
+    NumberField:
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/Field"
+
+    DateField:
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/Field"
+          
+    EnumField:
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/Field"
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        required:
+          type: boolean
+        type:
+          type: string
+        order:
+          type: integer
+        options:
+          type: array
+          items:
+            $ref: "#/components/schemas/EnumOption"
+        
+    EnumOption:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        checked:
+          type: boolean
+        order:
+          type: integer      
+
+    Response:
+      type: object
+      properties:
+        detail:
+          type: string
+          example: "Not found."
+
+    NotFoundResponse:
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/Response"
+          
+    RiskArray:
+      type: array
+      items:
+        $ref: '#/components/schemas/Risk'
+
+tags:
+- name: "risks"
+  description: "Operations related to the risks"
+
+paths:
+
+  /risks:
+
+    get:
+      tags:
+        - "risks"
+      operationId: "getRisks"
+      summary: "List of risks"
+      description: "List of Risks"
+      responses:
+        "200":
+          description: "Successful Operation"
+          content:
+            application/json:
+              schema:
+                type: object
+                $ref: "#/components/schemas/RiskArray"
+        default:
+          description: "Unsuccessful Operation"
+
+  /risks/{id}:
+
+    get:
+      tags:
+        - "risks"
+      operationId: "getRiskById"
+      summary: "Retrieves a risk based on the ID"
+      description: "Retrieves a risk based on the ID"
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            example: 1
+      responses:
+        "200":
+          description: "Successful Operation"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  name:
+                    type: string
+                  description:
+                    type: string
+                  category:
+                    type: object
+                    allOf:
+                      - $ref: "#/components/schemas/Category"
+                  fields:
+                    type: object
+                    oneOf:
+                      - $ref: "#/components/schemas/TextField"
+                      - $ref: "#/components/schemas/NumberField"
+                      - $ref: "#/components/schemas/DateField"
+                      - $ref: "#/components/schemas/EnumField"
+
+        "404":
+          description: "Not Found"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotFoundResponse"
+        default:
+          description: "Unsuccessful Operation"
