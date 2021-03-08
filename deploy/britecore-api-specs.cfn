@@ -1,0 +1,213 @@
+AWSTemplateFormatVersion: 2010-09-09
+Resources:
+  CloudMap:
+    Properties:
+      Description: Service Map for Docker Compose project britecore-api-specs
+      Name: britecore-api-specs.local
+      Vpc: vpc-0b28b4f187799cf33
+    Type: AWS::ServiceDiscovery::PrivateDnsNamespace
+  Cluster:
+    Properties:
+      ClusterName: britecore-api-specs
+      Tags:
+      - Key: com.docker.compose.project
+        Value: britecore-api-specs
+    Type: AWS::ECS::Cluster
+  LoadBalancer:
+    Properties:
+      LoadBalancerAttributes:
+      - Key: load_balancing.cross_zone.enabled
+        Value: "true"
+      Scheme: internet-facing
+      Subnets:
+      - subnet-01d78280c1bb31bda
+      - subnet-0e653385677af6a6f
+      - subnet-05b970c6527a64c25
+      Tags:
+      - Key: com.docker.compose.project
+        Value: britecore-api-specs
+      Type: network
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+  LogGroup:
+    Properties:
+      LogGroupName: /docker-compose/britecore-api-specs
+    Type: AWS::Logs::LogGroup
+  Savioli8080Ingress:
+    Properties:
+      CidrIp: 0.0.0.0/0
+      Description: swagger-ui:8080/tcp on savioli network
+      FromPort: 8080
+      GroupId:
+        Ref: SavioliNetwork
+      IpProtocol: TCP
+      ToPort: 8080
+    Type: AWS::EC2::SecurityGroupIngress
+  SavioliNetwork:
+    Properties:
+      GroupDescription: britecore-api-specs Security Group for savioli network
+      Tags:
+      - Key: com.docker.compose.project
+        Value: britecore-api-specs
+      - Key: com.docker.compose.network
+        Value: britecore-api-specs_savioli
+      VpcId: vpc-0b28b4f187799cf33
+    Type: AWS::EC2::SecurityGroup
+  SavioliNetworkIngress:
+    Properties:
+      Description: Allow communication within network savioli
+      GroupId:
+        Ref: SavioliNetwork
+      IpProtocol: "-1"
+      SourceSecurityGroupId:
+        Ref: SavioliNetwork
+    Type: AWS::EC2::SecurityGroupIngress
+  SwaggeruiService:
+    DependsOn:
+    - SwaggeruiTCP8080Listener
+    Properties:
+      Cluster:
+        Fn::GetAtt:
+        - Cluster
+        - Arn
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+      DeploymentController:
+        Type: ECS
+      DesiredCount: 1
+      LaunchType: FARGATE
+      LoadBalancers:
+      - ContainerName: swagger-ui
+        ContainerPort: 8080
+        TargetGroupArn:
+          Ref: SwaggeruiTCP8080TargetGroup
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups:
+          - Ref: SavioliNetwork
+          Subnets:
+          - subnet-01d78280c1bb31bda
+          - subnet-0e653385677af6a6f
+          - subnet-05b970c6527a64c25
+      PlatformVersion: 1.4.0
+      PropagateTags: SERVICE
+      SchedulingStrategy: REPLICA
+      ServiceRegistries:
+      - RegistryArn:
+          Fn::GetAtt:
+          - SwaggeruiServiceDiscoveryEntry
+          - Arn
+      Tags:
+      - Key: com.docker.compose.project
+        Value: britecore-api-specs
+      - Key: com.docker.compose.service
+        Value: swagger-ui
+      TaskDefinition:
+        Ref: SwaggeruiTaskDefinition
+    Type: AWS::ECS::Service
+  SwaggeruiServiceDiscoveryEntry:
+    Properties:
+      Description: '"swagger-ui" service discovery entry in Cloud Map'
+      DnsConfig:
+        DnsRecords:
+        - TTL: 60
+          Type: A
+        RoutingPolicy: MULTIVALUE
+      HealthCheckCustomConfig:
+        FailureThreshold: 1
+      Name: swagger-ui
+      NamespaceId:
+        Ref: CloudMap
+    Type: AWS::ServiceDiscovery::Service
+  SwaggeruiTCP8080Listener:
+    Properties:
+      DefaultActions:
+      - ForwardConfig:
+          TargetGroups:
+          - TargetGroupArn:
+              Ref: SwaggeruiTCP8080TargetGroup
+        Type: forward
+      LoadBalancerArn:
+        Ref: LoadBalancer
+      Port: 8080
+      Protocol: TCP
+    Type: AWS::ElasticLoadBalancingV2::Listener
+  SwaggeruiTCP8080TargetGroup:
+    Properties:
+      Port: 8080
+      Protocol: TCP
+      Tags:
+      - Key: com.docker.compose.project
+        Value: britecore-api-specs
+      TargetType: ip
+      VpcId: vpc-0b28b4f187799cf33
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+  SwaggeruiTaskDefinition:
+    Properties:
+      ContainerDefinitions:
+      - Command:
+        - us-east-2.compute.internal
+        - britecore-api-specs.local
+        Essential: false
+        Image: docker/ecs-searchdomain-sidecar:1.0
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            awslogs-group:
+              Ref: LogGroup
+            awslogs-region:
+              Ref: AWS::Region
+            awslogs-stream-prefix: britecore-api-specs
+        Name: Swaggerui_ResolvConf_InitContainer
+      - DependsOn:
+        - Condition: SUCCESS
+          ContainerName: Swaggerui_ResolvConf_InitContainer
+        Environment:
+        - Name: SWAGGER_JSON
+          Value: /specification/specification.yaml
+        Essential: true
+        Image: docker.io/savioli/britecore-api-specs:latest@sha256:8a96890eeeac24188abd54f4c56dcccb1e680dccdad50f908851bf1cd572d784
+        LinuxParameters: {}
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            awslogs-group:
+              Ref: LogGroup
+            awslogs-region:
+              Ref: AWS::Region
+            awslogs-stream-prefix: britecore-api-specs
+        Name: swagger-ui
+        PortMappings:
+        - ContainerPort: 8080
+          HostPort: 8080
+          Protocol: tcp
+      Cpu: "256"
+      ExecutionRoleArn:
+        Ref: SwaggeruiTaskExecutionRole
+      Family: britecore-api-specs-swagger-ui
+      Memory: "512"
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+      - FARGATE
+    Type: AWS::ECS::TaskDefinition
+  SwaggeruiTaskExecutionRole:
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Condition: {}
+          Effect: Allow
+          Principal:
+            Service: ecs-tasks.amazonaws.com
+        Version: 2012-10-17
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+      Tags:
+      - Key: com.docker.compose.project
+        Value: britecore-api-specs
+      - Key: com.docker.compose.service
+        Value: swagger-ui
+    Type: AWS::IAM::Role
